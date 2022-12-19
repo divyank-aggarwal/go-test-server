@@ -4,6 +4,12 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  PROJECT_ID: ${{ secrets.GKE_PROJECT }}
+  SERVICE_ACCOUNT_KEY: ${{ secrets.GKE_SA_KEY }}
+  GKE_CLUSTER: cluster-1
+  GKE_ZONE: us-central1-c
+
 jobs:
 
   push_to_registry:
@@ -23,7 +29,7 @@ jobs:
       with:
         images: divyank666/test_server
         tags:
-          type=sha
+          type=sha,format=long
     - name: Build and push docker image
       uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
       with:
@@ -31,3 +37,21 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+    - name: Setup gcloud
+      uses: google-github-actions/setup-gcloud@94337306dda8180d967a56932ceb4ddcf01edae7
+      with:
+        service_account_key: ${{ env.SERVICE_ACCOUNT_KEY }}
+        project_id: ${{ env.PROJECT_ID }}
+    - name: Configure docker with gcloud
+      run: |-
+        gcloud --quiet auth configure-docker
+    - name: Configure GKE Credentials
+      uses: google-github-actions/get-gke-credentials@fb08709ba27618c31c09e014e1d8364b02e5042e
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+        credentials: ${{ env.SERVICE_ACCOUNT_KEY }}
+    - name: Deploy
+      run: |-
+        kubectl --namespace default set image deployment/divyank-deployment first=divyank666/test_server:sha-$GITHUB_SHA
+        kubectl --namespace default rollout status deployment/divyank-deployment
